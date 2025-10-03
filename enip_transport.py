@@ -12,14 +12,22 @@ class EnipSender:
         self.tcp_port = tcp_port
         self.udp_port = udp_port
         self._tcp: Optional[socket.socket] = None
-        self._udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # shared send/recv
+
+        # Create ONE UDP socket for both send and recv, and BIND IT to 2222.
+        self._udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            self._udp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        except Exception:
+            pass
+        self._udp.bind(("", self.udp_port))   # <<< THIS IS THE IMPORTANT LINE
         self._udp.settimeout(1.0)
+
         self.session = 0
         self.conn_id = 0
         self.seq_ctp = 1
         self.seq_sai = 1
 
-        # cyclic sender state
+        # cyclic sender state (unchanged)
         self._cyc_thread: Optional[threading.Thread] = None
         self._cyc_stop = threading.Event()
         self._rpi_s = 0.010
@@ -27,6 +35,7 @@ class EnipSender:
         self._o2t_size = 44
         self._current_app = b"\x00" * 44
         self._lock = threading.Lock()
+
 
     def connect(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
