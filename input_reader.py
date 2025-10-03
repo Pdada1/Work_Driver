@@ -44,9 +44,19 @@ class ImplicitInputReader:
             return FixedOutBits(0)
         return FixedOutBits(int.from_bytes(self._last[off:off+2], "little"))
 
+    # convenience flags
     def in_pos(self) -> bool: return self.fixed_out().in_pos
     def move(self)   -> bool: return self.fixed_out().move
     def ready(self)  -> bool: return self.fixed_out().ready
+
+    # === debugging helpers ===
+    def last_app(self) -> bytes:
+        """Return the last application bytes the parser has seen."""
+        return self._last
+
+    def fixed_out_offset_bytes(self) -> int:
+        """Return the chosen Fixed I/O (OUT) offset (4 or 8)."""
+        return self._fixed_out_offset or 4
 
     @staticmethod
     def _auto_pick_offset(b: bytes) -> int:

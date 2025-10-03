@@ -4,8 +4,12 @@
 Can share the same UDP socket as the transport (recommended),
 or create its own legacy-bound socket if none is provided.
 Parses CPF 0x00B1; falls back to [CTP seq (2B)] + app if CPF is absent.
+
+Includes simple debugging helpers:
+- get_last_packet(): raw last UDP packet bytes
+- get_stats(): packet count, last length, last timestamp
 """
-import socket, struct, threading
+import socket, struct, threading, time
 from typing import Optional
 
 class UdpInputListener:
@@ -19,6 +23,11 @@ class UdpInputListener:
         self._thr: Optional[threading.Thread] = None
         self._stop = threading.Event()
         self._latest = b""
+
+        # debug state
+        self._last_pkt = b""
+        self._last_ts = 0.0
+        self._count = 0
 
     def start(self) -> None:
         if self._thr and self._thr.is_alive():
@@ -35,6 +44,13 @@ class UdpInputListener:
             while not self._stop.is_set():
                 try:
                     data, (_src_ip, _src_port) = self._sock.recvfrom(self.bufsize)
+
+                    # record raw packet + simple stats (for debugging)
+                    self._last_pkt = data
+                    self._count += 1
+                    self._last_ts = time.time()
+
+                    # extract application bytes
                     app = self._extract_app_from_cpf(data)
                     if app is not None:
                         self._latest = app
@@ -56,7 +72,21 @@ class UdpInputListener:
                 self._sock = None
 
     def get_app(self) -> bytes:
+        """Return last parsed application bytes (post-CTP/CPF extraction)."""
         return self._latest
+
+    # === debugging helpers ===
+    def get_last_packet(self) -> bytes:
+        """Return the last raw UDP packet bytes (unparsed)."""
+        return self._last_pkt
+
+    def get_stats(self) -> dict:
+        """Basic counters to verify we're receiving data."""
+        return {
+            "packets": self._count,
+            "last_len": len(self._last_pkt),
+            "last_ts": self._last_ts,
+        }
 
     @staticmethod
     def _extract_app_from_cpf(pkt: bytes) -> Optional[bytes]:

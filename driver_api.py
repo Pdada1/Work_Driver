@@ -1,12 +1,14 @@
 # driver_api.py
 """High-level operations; composes transport + input reader/listener."""
 import time
-from typing import Optional, Callable
+from typing import Optional, Callable, Union
 from interfaces import Transport  # kept for compatibility if you later inject a mock
 from enip_transport import EnipSender
 from input_reader import ImplicitInputReader
 from input_listener import UdpInputListener
 from types_hex import MOTOR_JOG, MOTOR_STOP, MOTOR_OP_1, MOTOR_OP_2
+
+ProgressFn = Callable[[dict], None]
 
 class DriverAPI:
     def __init__(self, drive_ip: str, rpi_ms: int = 10,
@@ -59,42 +61,49 @@ class DriverAPI:
             pass
 
     # ---- public helpers (set desired app; cyclic sender transmits it) ----
-    def Motor_Jog(self, duration_s: float = 1.0):
+    def Motor_Jog(self, duration_s: float = 1.0, progress: Optional[ProgressFn] = None):
         self.tx.update_app(MOTOR_JOG)
         end = time.time() + max(0.0, duration_s)
         while time.time() < end:
             time.sleep(self.rpi_ms / 1000.0)
             self._poll_input_once()
-        self.Motor_Stop()
+            if progress:
+                self._emit_progress(progress, started=True)
+        self.Motor_Stop(progress=progress)
 
-    def Motor_Stop(self):
+    def Motor_Stop(self, progress: Optional[ProgressFn] = None):
         self.tx.update_app(MOTOR_STOP)
         # give it a couple of cycles
         for _ in range(3):
             time.sleep(self.rpi_ms / 1000.0)
             self._poll_input_once()
+            if progress:
+                self._emit_progress(progress)
 
-    def Motor_Operation_1(self, timeout_s: float = 10.0) -> bool:
-        return self._op_until_inpos(MOTOR_OP_1, timeout_s)
+    def Motor_Operation_1(self, timeout_s: float = 10.0, progress: Optional[ProgressFn] = None) -> bool:
+        return self._op_until_inpos(MOTOR_OP_1, timeout_s, progress=progress)
 
-    def Motor_Operation_2(self, timeout_s: float = 10.0) -> bool:
-        return self._op_until_inpos(MOTOR_OP_2, timeout_s)
+    def Motor_Operation_2(self, timeout_s: float = 10.0, progress: Optional[ProgressFn] = None) -> bool:
+        return self._op_until_inpos(MOTOR_OP_2, timeout_s, progress=progress)
 
-    def _op_until_inpos(self, payload: bytes, timeout_s: float) -> bool:
-        # Hold START in the stream until IN-POS is seen, then STOP once
+    # Hold START in the stream until IN-POS is seen, then STOP once
+    def _op_until_inpos(self, payload: bytes, timeout_s: float, progress: Optional[ProgressFn]) -> bool:
         self.tx.update_app(payload)
-        deadline = time.time() + max(0.0, timeout_s)
+        t0 = time.time()
+        deadline = t0 + max(0.0, timeout_s)
         while time.time() < deadline:
             time.sleep(self.rpi_ms / 1000.0)
             self._poll_input_once()
+            if progress:
+                self._emit_progress(progress, started=True, t0=t0, deadline=deadline)
             if self.input.in_pos():
-                self.Motor_Stop()
+                self.Motor_Stop(progress=progress)
                 return True
         # timeout safety
-        self.Motor_Stop()
+        self.Motor_Stop(progress=progress)
         return False
 
-    def Pause(self, seconds: float, keep: str | bytes = "stop"):
+    def Pause(self, seconds: float, keep: Union[str, bytes] = "stop", progress: Optional[ProgressFn] = None):
         """
         Delay between operations without disrupting the cyclic sender.
         - keep="stop": assert MOTOR_STOP during the pause (default)
@@ -103,24 +112,75 @@ class DriverAPI:
         """
         seconds = max(0.0, float(seconds))
 
-        if isinstance(keep, bytes):
-            self.tx.update_app(keep)
+        if isinstance(keep, (bytes, bytearray)):
+            self.tx.update_app(bytes(keep))
         elif isinstance(keep, str):
-            if keep.lower() == "stop":
+            k = keep.lower()
+            if k == "stop":
                 self.tx.update_app(MOTOR_STOP)
-            elif keep.lower() == "hold":
-                pass  # leave current app as-is
+            elif k == "hold":
+                pass
             else:
                 raise ValueError("keep must be 'stop', 'hold', or bytes payload")
         else:
             raise TypeError("keep must be str or bytes")
 
-        # Loop in small steps so we keep ingesting T→O input frames for status
         end = time.monotonic() + seconds
         step = max(self.rpi_ms / 1000.0, 0.005)
         while time.monotonic() < end:
-            self._poll_input_once()       # keep status fresh during the pause
+            self._poll_input_once()
+            if progress:
+                self._emit_progress(progress)
             time.sleep(step)
 
+    # ===== debugging helpers (peek what the listener/parser sees) =====
+    def get_last_input_app(self) -> bytes:
+        """Return the most recent parsed application bytes (what the parser uses)."""
+        if self._listener:
+            return self._listener.get_app()
+        return self._get_in() or b""
+
+    def get_last_input_packet(self) -> bytes:
+        """Return the most recent raw UDP packet (before CPF/app extraction)."""
+        if self._listener and hasattr(self._listener, "get_last_packet"):
+            return self._listener.get_last_packet()
+        return b""
+
+    def debug_input_snapshot(self) -> str:
+        """Human-friendly one-liner showing app length, hex, Fixed I/O word and bits."""
+        app = self.get_last_input_app()
+        off = getattr(self.input, "_fixed_out_offset", None) or 4
+        word = int.from_bytes(app[off:off+2], "little") if len(app) >= off + 2 else 0
+        bits = "".join("1" if word & (1 << i) else "0" for i in range(15, -1, -1))
+        return (
+            f"app_len={len(app)} off={off} fixed_out=0x{word:04X} "
+            f"bits(MSB→LSB)={bits} app_hex={app.hex()}"
+        )
+
+    # emit a dict to any progress callback
+    def _emit_progress(self, cb: ProgressFn, started: bool = False,
+                       t0: Optional[float] = None, deadline: Optional[float] = None):
+        app = self.get_last_input_app()
+        off = getattr(self.input, "_fixed_out_offset", None) or 4
+        raw = int.from_bytes(app[off:off+2], "little") if len(app) >= off + 2 else 0
+        flags = self.input.fixed_out()
+        now = time.time()
+        payload = {
+            "ts": now,
+            "elapsed_s": (now - t0) if t0 else None,
+            "remaining_s": (deadline - now) if deadline else None,
+            "fixed_out_offset": off,
+            "fixed_out_raw": raw,
+            "in_pos": flags.in_pos,
+            "move": flags.move,
+            "ready": flags.ready,
+            "app_len": len(app),
+            "app_hex": app.hex(),
+            "started": started,
+        }
+        try:
+            cb(payload)
+        except Exception:
+            pass
 
 __all__ = ["DriverAPI"]
