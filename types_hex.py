@@ -43,6 +43,7 @@ MOTOR_OP_1 = hx(
     "0000" "0000" "0000" "0000"
 )
 
+
 MOTOR_OP_2 = hx(
     "01000000"
     "0000"      # M0 select
@@ -54,11 +55,73 @@ MOTOR_OP_2 = hx(
     "0000" "0000" "0000" "0000"
 )
 
+MOTOR_CW = hx(
+    "01000000"  #Intial header for UDP packets, dont change
+    "0000"      #Remote IO accessed
+    "0000"      #Operation Number Selection (M0-M7)
+    "0000"      # Fixed IO
+    "0100"      # DD operation type
+    "00000000"  # The step setting for position target goes from -2^31 to 2^31-1
+    "E8030000"  # The speed setting for operation
+    "40420f00"  # Starting Acceleration
+    "40420f00"  # Decelleration
+    "E803"      # Operating Current
+    "0000"      # Forwarding Destination (keep 0)
+    "0000"      #All others are 0
+    "0000"      
+    "0000" "0000" "0000" "0000" 
+) 
+
+MOTOR_TRIGGER = hx(
+    "01000000"  #Intial header for UDP packets, dont change
+    "0000"     
+    "0000"      
+    "0001"      # Fixed IO, bit 8 set for trigger
+    "0000"      
+    "00000000"  
+    "00000000" 
+    "00000000"  
+    "00000000"  
+    "0000"      
+    "0000"      
+    "0000"     
+    "0000"      
+    "0000" "0000" "0000" "0000" 
+)
+
+MOTOR_DETRIGGER = hx(
+    "01000000"  #Intial header for UDP packets, dont change
+    "0000"     
+    "0000"      
+    "0000"      # Fixed IO, bit 8 unset for detrigger
+    "0000"      
+    "00000000"  
+    "00000000" 
+    "00000000"  
+    "00000000"  
+    "0000"      
+    "0000"      
+    "0000"     
+    "0000"      
+    "0000" "0000" "0000" "0000" 
+)
+
 MOTOR_FREE = hx(
     "01000000"
     "0000"
     "0000"
     "4000"      # bit6 = FREE
+    "0000"
+    "00000000" "00000000" "00000000" "00000000"
+    "0000" "0000" "0000" "0000"
+    "0000" "0000" "0000" "0000"
+)
+
+MOTOR_NO_OP = hx(
+    "01000000"
+    "0000"
+    "0010"
+    "0008"      # bit11 = Reserved, used as NO-OP
     "0000"
     "00000000" "00000000" "00000000" "00000000"
     "0000" "0000" "0000" "0000"

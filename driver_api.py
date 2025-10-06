@@ -6,7 +6,7 @@ from interfaces import Transport  # kept for compatibility if you later inject a
 from enip_transport import EnipSender
 from input_reader import ImplicitInputReader
 from input_listener import UdpInputListener
-from types_hex import MOTOR_JOG, MOTOR_STOP, MOTOR_OP_1, MOTOR_OP_2
+from types_hex import MOTOR_JOG, MOTOR_STOP, MOTOR_OP_1, MOTOR_OP_2, MOTOR_TRIGGER, MOTOR_DETRIGGER, MOTOR_NO_OP
 
 ProgressFn = Callable[[dict], None]
 
@@ -42,7 +42,7 @@ class DriverAPI:
             self._listener.start()
             self._listener_pending = False
         # keep the Class-1 connection alive continuously
-        self.tx.update_app(MOTOR_STOP)  # idle baseline
+        self.tx.update_app(MOTOR_NO_OP)  # idle baseline
         self.tx.start_cyclic(rpi_ms=self.rpi_ms, mirror_over_tcp=self.mirror, o2t_size=44)
 
     def close(self):
@@ -73,6 +73,19 @@ class DriverAPI:
 
     def Motor_Stop(self, progress: Optional[ProgressFn] = None):
         self.tx.update_app(MOTOR_STOP)
+        # give it a couple of cycles
+        for _ in range(3):
+            time.sleep(self.rpi_ms / 1000.0)
+            self._poll_input_once()
+            if progress:
+                self._emit_progress(progress)
+    
+    def Motor_Trig(self, progress: Optional[ProgressFn] = None):
+        self._op_until_inpos(MOTOR_TRIGGER,timeout_s=10,progress=progress)
+
+
+    def Motor_DeTrig(self, progress: Optional[ProgressFn] = None):
+        self.tx.update_app(MOTOR_DETRIGGER)
         # give it a couple of cycles
         for _ in range(3):
             time.sleep(self.rpi_ms / 1000.0)

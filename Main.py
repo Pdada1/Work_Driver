@@ -13,15 +13,16 @@ def main():
     drv = DriverAPI(IP_ADDRESS, rpi_ms=RPI_MS, fixed_out_offset=FIXED_OFFSET)
     drv.connect()
     try:
-        print("Starting Operation 2")
-        ok2 = drv.Motor_Operation_2(timeout_s=MOVE_TIMEOUT)
-        print("op2:", ok2)
+        #print("Starting Operation 2")
+        #ok2 = drv.Motor_Operation_2(timeout_s=MOVE_TIMEOUT)
+        #print("op2:", ok2)
 
-        drv.Pause(5, keep="stop")
-        print("Starting Operation 1")
+        #drv.Pause(5, keep="stop")
+        #print("Starting Operation 1")
 
-        ok1 = drv.Motor_Operation_1(timeout_s=MOVE_TIMEOUT)
-        print("op1:", ok1)
+        #ok1 = drv.Motor_Operation_2(timeout_s=MOVE_TIMEOUT)
+        #print("op1:", ok1)
+        drv.Motor_Trig()
     finally:
         drv.close()
 
