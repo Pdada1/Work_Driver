@@ -6,7 +6,7 @@ from interfaces import Transport  # kept for compatibility if you later inject a
 from enip_transport import EnipSender
 from input_reader import ImplicitInputReader
 from input_listener import UdpInputListener
-from types_hex import MOTOR_JOG, MOTOR_STOP, MOTOR_OP_1, MOTOR_OP_2
+from types_hex import MOTOR_JOG, MOTOR_STOP, MOTOR_OP_1, MOTOR_OP_2,ALARM_RESET
 
 ProgressFn = Callable[[dict], None]
 
@@ -82,6 +82,16 @@ class DriverAPI:
             self._poll_input_once()
             if progress:
                 self._emit_progress(progress)
+    
+    def Alrm_Rst(self,progress: Optional[ProgressFn]=None):
+        if(self.input.alarm_active):
+            self.tx.update_app(ALARM_RESET)
+            for _ in range(3):
+                time.sleep(self.rpi_ms / 1000.0)
+                self._poll_input_once()
+                if progress:
+                    self._emit_progress(progress)
+    
 
     #First motor operation, to position 1 as marked on the H frame
     def Motor_Operation_1(self, timeout_s: float = 10.0, progress: Optional[ProgressFn] = None) -> bool:

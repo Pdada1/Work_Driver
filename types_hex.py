@@ -68,6 +68,17 @@ MOTOR_FREE = hx(
     "0000" "0000" "0000" "0000"
 )
 
+ALARM_RESET= hx(
+    "01000000"
+    "0000"
+    "0000"
+    "8000"      # bit6 = ALRM_RESET
+    "0000"
+    "00000000" "00000000" "00000000" "00000000"
+    "0000" "0000" "0000" "0000"
+    "0000" "0000" "0000" "0000"
+)
+
 # Guard against accidental edits
 for _name, _val in {
     "MOTOR_JOG": MOTOR_JOG,
