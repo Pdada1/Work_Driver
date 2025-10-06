@@ -53,6 +53,21 @@ class ImplicitInputReader:
     def move(self)   -> bool: return self.fixed_out().move
     def ready(self)  -> bool: return self.fixed_out().ready
 
+    def alarm_active(self) -> bool:
+        """True if the Alarm Active bit in Fixed I/O (OUT) is set."""
+        return self.fixed_out().alm_a
+
+    def present_alarm_code(self) -> int:
+        """Return the present alarm code (0 if offset/size is unset or out of range)."""
+        if self._alarm_off is None:
+            return 0
+        if self._alarm_bytes == 2:
+            if len(self._last) < self._alarm_off + 2: return 0
+            return int.from_bytes(self._last[self._alarm_off:self._alarm_off+2], "little", signed=False)
+        else:
+            if len(self._last) < self._alarm_off + 4: return 0
+            return int.from_bytes(self._last[self._alarm_off:self._alarm_off+4], "little", signed=False)
+
     # === debugging helpers ===
     def last_app(self) -> bytes:
         """Return the last application bytes the parser has seen."""
