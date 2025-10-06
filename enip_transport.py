@@ -27,7 +27,7 @@ class EnipSender:
         self.seq_ctp = 1
         self.seq_sai = 1
 
-        # cyclic sender state (unchanged)
+        # cyclic sender state to continiously send message so connection stays open
         self._cyc_thread: Optional[threading.Thread] = None
         self._cyc_stop = threading.Event()
         self._rpi_s = 0.010
@@ -36,7 +36,7 @@ class EnipSender:
         self._current_app = b"\x00" * 44
         self._lock = threading.Lock()
 
-
+    #Function to register initial session 
     def connect(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(5.0)
@@ -59,6 +59,7 @@ class EnipSender:
             pass
         self._tcp = s
 
+    #Used to close connection
     def close(self):
         self.stop_cyclic()
         try:
@@ -69,7 +70,7 @@ class EnipSender:
             self.session = 0
             self.conn_id = 0
 
-    # One-shot send (still available)
+    # One-shot send to send a packet once if required
     def send_app(self, app: bytes, mirror_over_tcp: bool = False):
         if not (self._tcp and self.conn_id):
             raise RuntimeError("Not connected")
@@ -116,6 +117,7 @@ class EnipSender:
         self._cyc_thread = threading.Thread(target=_run, name="enip-cyclic", daemon=True)
         self._cyc_thread.start()
 
+    #Used to gracefully halt the cyclic sending in order to close a conenction
     def stop_cyclic(self, join_timeout: float = 2.0):
         if self._cyc_thread and self._cyc_thread.is_alive():
             self._cyc_stop.set()
@@ -123,11 +125,13 @@ class EnipSender:
         self._cyc_thread = None
         self._cyc_stop.clear()
 
+    #Update what the message being sent to driver is with new payload
     def update_app(self, app: bytes):
         """Update the current O→T payload the cyclic sender transmits."""
         with self._lock:
             self._current_app = app or b""
-
+            
+    #Returns current UDP socket for input listener
     def udp_socket(self) -> socket.socket:
         """Expose shared UDP socket (for input listener)."""
         return self._udp

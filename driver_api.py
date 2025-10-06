@@ -35,7 +35,7 @@ class DriverAPI:
             self._get_in = self._listener.get_app
             self._listener_pending = True
 
-    # lifecycle
+    # Sends the initial TCP handshake to begin connection and get connection ID then send baseline commands to keep connection active
     def connect(self):
         self.tx.connect()
         if self._listener and self._listener_pending:
@@ -45,6 +45,7 @@ class DriverAPI:
         self.tx.update_app(MOTOR_STOP)  # idle baseline
         self.tx.start_cyclic(rpi_ms=self.rpi_ms, mirror_over_tcp=self.mirror, o2t_size=44)
 
+    #stops the cyclic sending in order to gracefully close connection
     def close(self):
         self.tx.stop_cyclic()
         self.tx.close()
@@ -61,6 +62,7 @@ class DriverAPI:
             pass
 
     # ---- public helpers (set desired app; cyclic sender transmits it) ----
+    #Used to jog the motor for a set duration of time
     def Motor_Jog(self, duration_s: float = 1.0, progress: Optional[ProgressFn] = None):
         self.tx.update_app(MOTOR_JOG)
         end = time.time() + max(0.0, duration_s)
@@ -71,6 +73,7 @@ class DriverAPI:
                 self._emit_progress(progress, started=True)
         self.Motor_Stop(progress=progress)
 
+    #Used to stop the motor without having an overload alarm
     def Motor_Stop(self, progress: Optional[ProgressFn] = None):
         self.tx.update_app(MOTOR_STOP)
         # give it a couple of cycles
@@ -80,13 +83,15 @@ class DriverAPI:
             if progress:
                 self._emit_progress(progress)
 
+    #First motor operation, to position 1 as marked on the H frame
     def Motor_Operation_1(self, timeout_s: float = 10.0, progress: Optional[ProgressFn] = None) -> bool:
         return self._op_until_inpos(MOTOR_OP_1, timeout_s, progress=progress)
 
+    #Second motor operation, to position 2 as marked on H frame
     def Motor_Operation_2(self, timeout_s: float = 10.0, progress: Optional[ProgressFn] = None) -> bool:
         return self._op_until_inpos(MOTOR_OP_2, timeout_s, progress=progress)
 
-    # Hold START in the stream until IN-POS is seen, then STOP once
+    # Hold START in the stream until IN-POS is seen, then STOP once the motor reports in progress
     def _op_until_inpos(self, payload: bytes, timeout_s: float, progress: Optional[ProgressFn]) -> bool:
         self.tx.update_app(payload)
         t0 = time.time()
@@ -103,6 +108,7 @@ class DriverAPI:
         self.Motor_Stop(progress=progress)
         return False
 
+    #Allows for a pause function without disrupting the cyclic sender. Can additionally use keep to specify if the motor is stopped or if operation is held
     def Pause(self, seconds: float, keep: Union[str, bytes] = "stop", progress: Optional[ProgressFn] = None):
         """
         Delay between operations without disrupting the cyclic sender.

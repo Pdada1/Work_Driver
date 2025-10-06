@@ -8,6 +8,7 @@ auto-detect on the first update().
 from dataclasses import dataclass
 from typing import Optional
 
+#These properties come from the Fixed IO output of the Driver
 @dataclass
 class FixedOutBits:
     raw: int
@@ -28,16 +29,19 @@ class FixedOutBits:
     @property
     def alm_a(self):  return bool(self.raw & (1 << 7))
 
+#Class to handle reading of current drive state
 class ImplicitInputReader:
     def __init__(self, fixed_out_offset: Optional[int] = None):
         self._last = b""
         self._fixed_out_offset: Optional[int] = fixed_out_offset  # 4 or 8
 
+    #Updates the last message seen
     def update(self, app: bytes):
         self._last = app or b""
         if self._fixed_out_offset is None:
             self._fixed_out_offset = self._auto_pick_offset(self._last)
-
+            
+    #Used to grab fixed output of message based on first message sent
     def fixed_out(self) -> FixedOutBits:
         off = 4 if self._fixed_out_offset is None else self._fixed_out_offset
         if len(self._last) < off + 2:
