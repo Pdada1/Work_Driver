@@ -6,7 +6,8 @@ from interfaces import Transport  # kept for compatibility if you later inject a
 from enip_transport import EnipSender
 from input_reader import ImplicitInputReader
 from input_listener import UdpInputListener
-from types_hex import MOTOR_JOG, MOTOR_STOP, MOTOR_OP_1, MOTOR_OP_2, MOTOR_TRIGGER, MOTOR_DETRIGGER, MOTOR_NO_OP
+from types_hex import MOTOR_JOG, MOTOR_STOP, MOTOR_OP_1, MOTOR_OP_2, motor_angle, MOTOR_TRIGGER, MOTOR_DETRIGGER, MOTOR_NO_OP
+from hexutil import hx
 
 ProgressFn = Callable[[dict], None]
 
@@ -80,9 +81,13 @@ class DriverAPI:
             if progress:
                 self._emit_progress(progress)
     
+    def Motor_Move_To_Angle(self,angle,progress: Optional[ProgressFn] = None):
+        value=self.angle_to_step_hex(angle)
+        if(not(value)==False):
+            self._op_until_inpos(hx(motor_angle[0:24]+value+motor_angle[32:]),timeout_s=20,progress=progress)
+    
     def Motor_Trig(self, progress: Optional[ProgressFn] = None):
         self._op_until_inpos(MOTOR_TRIGGER,timeout_s=10,progress=progress)
-
 
     def Motor_DeTrig(self, progress: Optional[ProgressFn] = None):
         self.tx.update_app(MOTOR_DETRIGGER)
@@ -145,6 +150,20 @@ class DriverAPI:
             if progress:
                 self._emit_progress(progress)
             time.sleep(step)
+
+#Helper function to convert between input angle and step. Also does error trapping
+#Zero maps to -180, 360 to +180, and position mapping from -2^31 to 2^31-1
+    def angle_to_step_hex(self,angle):
+        if(int(angle)>=0 and int(angle)<=360):
+            print("Valid")
+            steps=int((2**32-1)*(angle/360)-2**31)
+            step_byte=steps.to_bytes(4, "little",signed=True).hex()
+            print(step_byte)
+            return step_byte
+        else:
+            return False
+
+
 
     # ===== debugging helpers (peek what the listener/parser sees) =====
     def get_last_input_app(self) -> bytes:

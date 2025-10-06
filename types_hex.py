@@ -55,11 +55,11 @@ MOTOR_OP_2 = hx(
     "0000" "0000" "0000" "0000"
 )
 
-MOTOR_CW = hx(
+motor_angle = (
     "01000000"  #Intial header for UDP packets, dont change
     "0000"      #Remote IO accessed
     "0000"      #Operation Number Selection (M0-M7)
-    "0000"      # Fixed IO
+    "0001"      # Fixed IO
     "0100"      # DD operation type
     "00000000"  # The step setting for position target goes from -2^31 to 2^31-1
     "E8030000"  # The speed setting for operation
@@ -70,7 +70,7 @@ MOTOR_CW = hx(
     "0000"      #All others are 0
     "0000"      
     "0000" "0000" "0000" "0000" 
-) 
+)
 
 MOTOR_TRIGGER = hx(
     "01000000"  #Intial header for UDP packets, dont change
